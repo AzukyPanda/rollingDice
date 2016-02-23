@@ -1,12 +1,19 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <meta charset=utf-8>
-        <title>Dice</title>
-        <style src="style.css"></style>
-    </head>
-    <body>
-        <script src="js/three.min.js"></script>
-        <script src="js/main.js"></script>
-    </body>
+  <head>
+    <meta charset=utf-8>
+    <title>Dice</title>
+    <link rel="stylesheet" href="./style.css">
+  </head>
+  <body onload="start()">
+    <script src="js/three.min.js"></script>
+    <script src="js/main.js"></script>
+  </body>
 </html>
+
+ would start getting a velocity that depends on the accelerometer (plus or minus, let's say, 20%) and random angular speeds for the dice.
+Then, find the trajectory for each and when touching a border.
+Bounce them to one direction or another depending on the rotation at that particular moment.
+Change the sign of the angular speed if the dice bounce back.
+Reduce the speed about 50% each bounce, until a threshold.
+Below that threshold, leave them in the floor and stop movement.
