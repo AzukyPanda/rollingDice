@@ -56,15 +56,12 @@ function Environment(width, height, viewAngle, near, far, backgroundColor) {
     this.animate = function() {
         requestAnimationFrame(self.animate);
         self.controls.update();
-    
         //dice.apply_forces();
         //dice.move();
-    
         self.renderer.render(self.scene, self.camera);    
     };
 };
 
-    
 function start() {
     var env = new Environment();
     env.init();
@@ -73,6 +70,10 @@ function start() {
     
     //add canvas to HTML
     document.body.appendChild(env.renderer.domElement);
+
+    //dice
+    var dice = Cube();
+    //env.scene.add(dice.mesh);
 
     //loop
     env.animate();
@@ -117,12 +118,12 @@ function Cube(size, color) {
     return new THREE.Mesh(THREE.CubeGeometry(size, size, size, 1, 1, 1, null, true), material);
 }
 
-function Floor(width, length, color) {
+function Floor(width, length, col) {
     width = width | 500;
     length = length | 500;
-    color = color | 0xffffff;
+    col = col | 0xffffff;
     var geo = new THREE.PlaneGeometry(width, length);
-    var mat = new THREE.MeshBasicMaterial({color: color});
+    var mat = new THREE.MeshBasicMaterial({color: col});
     var plane = new THREE.Mesh(geo, mat); //placed in plane xy, z=0 
     plane.rotation.x = -Math.PI/2;
     //plane.position.y = ;
@@ -131,13 +132,16 @@ function Floor(width, length, color) {
 
 function SquareDice(size, col) {
     var cGeo = new THREE.CubeGeometry(size, size, size);
-    var cMaterial = new THREE.MeshLambertMaterial({color: col});
+    var cMaterial = new THREE.MeshBasicMaterial({color: col});
     var cube = new THREE.Mesh(cGeo, cMaterial);
     return cube;
 }
 
 function Dice(mass, diceType, col, size) {
     this.mass = mass | 10;
+    this.col = col | 0xdddddd;
+    this.size = size | 10;
+    
     this.velocity = new THREE.Vector3(0, 0, 0);
     this.force =  new THREE.Vector3(0, 0, 0);
     this.rotation = new THREE.Euler(0, 0 ,0);
@@ -146,6 +150,8 @@ function Dice(mass, diceType, col, size) {
     this.position = this.mesh.position;
     
     this.throw = function() {
+        //initial position
+        this.position = new THREE.Vector3(0, 50, 0);
         //reset speed
         this.velocity = new THREE.Vector3(0, 0, 0);
         //apply random force in one direction (x)
