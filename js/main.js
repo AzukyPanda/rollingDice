@@ -72,7 +72,10 @@ function start() {
     document.body.appendChild(env.renderer.domElement);
 
     //dice
-    var dice = Cube();
+    var cube = new Dice();
+    cube.mesh.position.set(0,20,0);
+    env.scene.add(cube.mesh);
+    
     //env.scene.add(dice.mesh);
 
     //loop
@@ -111,13 +114,6 @@ function buildAxis(src, dst, colorHex, dashed) {
     return axis;
 }
 
-function Cube(size, color) {
-    size = size | 10;
-    color = color | 0xeeeeee;
-    var material = new THREE.MeshBasicMaterial({color: color});
-    return new THREE.Mesh(THREE.CubeGeometry(size, size, size, 1, 1, 1, null, true), material);
-}
-
 function Floor(width, length, col) {
     width = width | 500;
     length = length | 500;
@@ -131,22 +127,24 @@ function Floor(width, length, col) {
 }
 
 function SquareDice(size, col) {
-    var cGeo = new THREE.CubeGeometry(size, size, size);
-    var cMaterial = new THREE.MeshBasicMaterial({color: col});
-    var cube = new THREE.Mesh(cGeo, cMaterial);
+    size = size | 10;
+    col = col | 0xcccccc;
+    var mat = new THREE.MeshBasicMaterial({color: col, wireframe: true});
+    var cube = new THREE.Mesh(new THREE.CubeGeometry(size, size, size), mat);
     return cube;
 }
 
-function Dice(mass, diceType, col, size) {
+function Dice(diceType, size, col, mass) {
+    this.diceType = diceType | "square";
     this.mass = mass | 10;
-    this.col = col | 0xdddddd;
+    this.col = col | 0xcccccc;
     this.size = size | 10;
     
     this.velocity = new THREE.Vector3(0, 0, 0);
     this.force =  new THREE.Vector3(0, 0, 0);
     this.rotation = new THREE.Euler(0, 0 ,0);
 
-    this.mesh = SquareDice(size, col);
+    this.mesh = SquareDice(size, col);  //in the future, switch case for dice type
     this.position = this.mesh.position;
     
     this.throw = function() {
