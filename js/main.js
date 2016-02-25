@@ -22,8 +22,8 @@ function Environment(width, height, viewAngle, near, far, backgroundColor) {
     
     this.init = function() {
         //set camera
-        this.camera.position.set(100, 50, 100);
-        this.camera.lookAt(new THREE.Vector3(0, 0, 0));
+        this.camera.position.set(150, 0, 100);
+        this.camera.lookAt(new THREE.Vector3(150, 0, 0));
         //set trackball controls
         this.initControls();
         //set renderer
@@ -75,7 +75,6 @@ function start() {
     dice.throw();
     env.scene.add(dice.mesh);
 
-    var oldPosition = new THREE.Vector3(0, 0, 0);
     var id;
     var nbFrames = 0;
     
@@ -87,14 +86,15 @@ function start() {
         dice.applyForces();
         dice.move(dt);
 
+        console.log(nbFrames);
         console.log(dice.velocity);
 
-        if (oldPosition.equals(dice.position) || nbFrames > 500 || dice.rotation.z===0) {
+        //criteria to stop animation
+        if (nbFrames > 500) {
             cancelAnimationFrame(id);
             console.log("stop");
             console.log(nbFrames);
         }
-        oldPosition = dice.position.clone();
         nbFrames += 1;
         
         env.renderer.render(env.scene, env.camera);
@@ -171,6 +171,8 @@ function Dice(diceType, size, col, mass) {
     this.position = this.mesh.position;
     this.rotation = this.mesh.rotation;
 
+    this.stopSequence = false;
+
     //forces
     this.throwingForce = new THREE.Vector3(0, 0, 0);
     this.collisionForce = new THREE.Vector3(0, 0, 0);
@@ -193,20 +195,22 @@ function Dice(diceType, size, col, mass) {
 
     this.floorCollision = function() {
         //min coordinates of the cube, if rotation only around z axis
-        var angle = (Math.PI / 8) - (this.rotation.z % (Math.PI / 8));
+        var alpha = this.rotation.z % (Math.PI / 8);
+        var angle = (Math.PI / 8) - alpha;
         var bottomY= this.position.y - Math.abs(Math.cos(angle) * this.size / Math.SQRT2);
         if (bottomY <= 0) {
             console.log("collision");
             console.log(angle);
             //re-position a bit above zero
-            this.position.y += 2 - bottomY;
+            this.position.y += - bottomY;
             //bouncing effect : reverse y in velocity, scaled down
             //if angle close to 0, should not bounce much
-            this.velocity.y = - this.velocity.y * angle * 0.5;
-            //reduce speed and rotation
-            this.velocity.multiplyScalar(0.5);
+            this.velocity.y = - this.velocity.y * angle;
+            //reduce speed
+            this.velocity.multiplyScalar(0.8);
+            //rotation
             this.rotationVector.multiplyScalar(0.9);
-        }
+            }
     };
 
     this.applyForces = function() {
@@ -228,8 +232,7 @@ function Dice(diceType, size, col, mass) {
         }
         //new velocity
         this.velocity.addScaledVector(this.force, dt / this.mass);
-        //console.log(this.velocity);
-
+        
         //new position
         this.mesh.position.addScaledVector(this.velocity, dt);
 
