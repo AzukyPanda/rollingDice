@@ -22,7 +22,7 @@ function Environment(width, height, viewAngle, near, far, backgroundColor) {
     
     this.init = function() {
         //set camera
-        this.camera.position.set(30, 50, 120);
+        this.camera.position.set(100, 50, 100);
         this.camera.lookAt(new THREE.Vector3(0, 0, 0));
         //set trackball controls
         this.initControls();
@@ -51,34 +51,56 @@ function Environment(width, height, viewAngle, near, far, backgroundColor) {
     this.addAxes = function() {
         this.scene.add(buildAxes(1000));
     };
-
-
-    this.animate = function() {
-        requestAnimationFrame(self.animate);
-        self.controls.update();
-        //dice.apply_forces();
-        //dice.move();
-        self.renderer.render(self.scene, self.camera);    
-    };
 };
 
 function start() {
     var env = new Environment();
     env.init();
     env.addAxes();
-    env.addLight(); 
+    env.addLight();
     
     //add canvas to HTML
     document.body.appendChild(env.renderer.domElement);
 
-    //dice
-    var cube = new Dice();
-    cube.mesh.position.set(0,20,0);
-    env.scene.add(cube.mesh);
-    
-    //env.scene.add(dice.mesh);
+    //time
+    var dt = 1;
 
-    //loop
+    //floor
+    var floor = buildFloor();
+    env.scene.add(floor);
+    
+    //dice
+    var dice = new Dice();
+    dice.init();
+    dice.throw();
+    env.scene.add(dice.mesh);
+
+    var oldPosition = new THREE.Vector3(0, 0, 0);
+    var id;
+    var nbFrames = 0;
+    
+    //rendering one frame
+    env.animate = function() {
+        id=requestAnimationFrame(env.animate);
+        env.controls.update();
+
+        dice.applyForces();
+        dice.move(dt);
+
+        console.log(dice.velocity);
+
+        if (oldPosition.equals(dice.position) || nbFrames > 500 || dice.rotation.z===0) {
+            cancelAnimationFrame(id);
+            console.log("stop");
+            console.log(nbFrames);
+        }
+        oldPosition = dice.position.clone();
+        nbFrames += 1;
+        
+        env.renderer.render(env.scene, env.camera);
+    };
+
+    //start loop
     env.animate();
 }
 
@@ -114,15 +136,16 @@ function buildAxis(src, dst, colorHex, dashed) {
     return axis;
 }
 
-function Floor(width, length, col) {
+function buildFloor(width, length, col, y) {
     width = width | 500;
     length = length | 500;
     col = col | 0xffffff;
+    y = y | -0.1;
     var geo = new THREE.PlaneGeometry(width, length);
     var mat = new THREE.MeshBasicMaterial({color: col});
     var plane = new THREE.Mesh(geo, mat); //placed in plane xy, z=0 
     plane.rotation.x = -Math.PI/2;
-    //plane.position.y = ;
+    plane.position.set(0, y, 0);
     return plane; 
 }
 
@@ -142,43 +165,78 @@ function Dice(diceType, size, col, mass) {
     
     this.velocity = new THREE.Vector3(0, 0, 0);
     this.force =  new THREE.Vector3(0, 0, 0);
-    this.rotation = new THREE.Euler(0, 0 ,0);
+    this.rotationVector = new THREE.Vector3(0, 0 ,0);
 
     this.mesh = SquareDice(size, col);  //in the future, switch case for dice type
     this.position = this.mesh.position;
+    this.rotation = this.mesh.rotation;
+
+    //forces
+    this.throwingForce = new THREE.Vector3(0, 0, 0);
+    this.collisionForce = new THREE.Vector3(0, 0, 0);
+    this.gravity = new THREE.Vector3(0, - this.mass * 0.0098, 0); //9.8 m/s^2
+
+    this.init = function() {
+        //initial position
+        this.position.set(0, 50, 0);
+    };
     
     this.throw = function() {
-        //initial position
-        this.position = new THREE.Vector3(0, 50, 0);
         //reset speed
         this.velocity = new THREE.Vector3(0, 0, 0);
         //apply random force in one direction (x)
-        this.force.set(2, 0, 0);
-        //apply rotation perpendicular (z)
-        this.rotation.set(0, 0 , 0.1);
+        this.throwingForce.set(5, 0, 0);
+        this.toThrow = true;
+        //apply rotation perpendicularly (z)
+        this.rotationVector.set(0, 0 , -0.1);
     };
 
-    this.apply_forces = function() {
-        if (this.position.y <= -600) {
-            //floor: stop
+    this.floorCollision = function() {
+        //min coordinates of the cube, if rotation only around z axis
+        var angle = (Math.PI / 8) - (this.rotation.z % (Math.PI / 8));
+        var bottomY= this.position.y - Math.abs(Math.cos(angle) * this.size / Math.SQRT2);
+        if (bottomY <= 0) {
+            console.log("collision");
+            console.log(angle);
+            //re-position a bit above zero
+            this.position.y += 2 - bottomY;
+            //bouncing effect : reverse y in velocity, scaled down
+            //if angle close to 0, should not bounce much
+            this.velocity.y = - this.velocity.y * angle * 0.5;
+            //reduce speed and rotation
+            this.velocity.multiplyScalar(0.5);
+            this.rotationVector.multiplyScalar(0.9);
         }
-        else {
-            //gravity
-            var p = this.mass * 0.0098; //9.8 m/s^2
-            this.force.y = this.force.y - p;
-        }
+    };
+
+    this.applyForces = function() {
+        this.force.set(0, 0, 0);
+        //compute forces
+        this.floorCollision();
+        //add all forces
+        this.force.add(this.throwingForce);
+        this.force.add(this.collisionForce);
+        this.force.add(this.gravity);
+        //reset external forces
+        this.throwingForce.set(0, 0, 0);
+        this.collisionForce.set(0, 0, 0);
     };
 
     this.move = function(dt) {
-        dt = dt | 1;
-
-        console.log(this.mesh.position.y);
-        
+        if (dt < 0.1){
+            dt = 0.1;
+        }
         //new velocity
         this.velocity.addScaledVector(this.force, dt / this.mass);
+        //console.log(this.velocity);
 
         //new position
         this.mesh.position.addScaledVector(this.velocity, dt);
+
+        //rotation
+        this.mesh.rotation.x += this.rotationVector.x;
+        this.mesh.rotation.y += this.rotationVector.y;
+        this.mesh.rotation.z += this.rotationVector.z;
     };
 }
 
