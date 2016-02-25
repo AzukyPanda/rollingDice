@@ -22,8 +22,8 @@ function Environment(width, height, viewAngle, near, far, backgroundColor) {
     
     this.init = function() {
         //set camera
-        this.camera.position.set(150, 0, 100);
-        this.camera.lookAt(new THREE.Vector3(150, 0, 0));
+        this.camera.position.set(20, 50, 150);
+        this.camera.lookAt(new THREE.Vector3(0, 0, 0));
         //set trackball controls
         this.initControls();
         //set renderer
