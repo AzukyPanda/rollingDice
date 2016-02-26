@@ -23,7 +23,7 @@ function Environment(width, height, viewAngle, near, far, backgroundColor) {
     this.init = function() {
         //set camera
         this.camera.position.set(20, 50, 150);
-        this.camera.lookAt(new THREE.Vector3(0, 0, 0));
+        this.camera.lookAt(new THREE.Vector3(500, 0, 0));
         //set trackball controls
         this.initControls();
         //set renderer
@@ -68,12 +68,15 @@ function start() {
     //floor
     var floor = buildFloor();
     env.scene.add(floor);
-    
+
     //dice
     var dice = new Dice();
     dice.init();
     dice.throw();
     env.scene.add(dice.mesh);
+
+    var cube = SquareDice(1);
+    env.scene.add(cube);
 
     var id;
     var nbFrames = 0;
@@ -81,22 +84,17 @@ function start() {
     //rendering one frame
     env.animate = function() {
         id=requestAnimationFrame(env.animate);
+
+        //update controls
         env.controls.update();
 
-        dice.applyForces();
-        dice.move(dt);
-
-        console.log(nbFrames);
-        console.log(dice.velocity);
-
         //criteria to stop animation
-        if (nbFrames > 500) {
-            cancelAnimationFrame(id);
-            console.log("stop");
-            console.log(nbFrames);
+        if (nbFrames < 500) {
+            nbFrames += 1;
+            dice.applyForces();
+            dice.move(dt);
+            //console.log(dice.velocity);
         }
-        nbFrames += 1;
-        
         env.renderer.render(env.scene, env.camera);
     };
 
@@ -137,10 +135,10 @@ function buildAxis(src, dst, colorHex, dashed) {
 }
 
 function buildFloor(width, length, col, y) {
-    width = width | 500;
-    length = length | 500;
-    col = col | 0xffffff;
-    y = y | -0.1;
+    width = 500;
+    length = 500;
+    col = 0xffffff;
+    y = 0;
     var geo = new THREE.PlaneGeometry(width, length);
     var mat = new THREE.MeshBasicMaterial({color: col});
     var plane = new THREE.Mesh(geo, mat); //placed in plane xy, z=0 
@@ -150,26 +148,29 @@ function buildFloor(width, length, col, y) {
 }
 
 function SquareDice(size, col) {
-    size = size | 10;
-    col = col | 0xcccccc;
+    col = 0xcccccc;
     var mat = new THREE.MeshBasicMaterial({color: col, wireframe: true});
     var cube = new THREE.Mesh(new THREE.CubeGeometry(size, size, size), mat);
     return cube;
 }
 
 function Dice(diceType, size, col, mass) {
-    this.diceType = diceType | "square";
-    this.mass = mass | 10;
-    this.col = col | 0xcccccc;
-    this.size = size | 10;
+    this.diceType = "square";
+    this.mass = 10;
+    this.col = 0xcccccc;
+    this.size = 20;
+
+    this.halfSize = this.size / 2;
     
     this.velocity = new THREE.Vector3(0, 0, 0);
     this.force =  new THREE.Vector3(0, 0, 0);
     this.rotationVector = new THREE.Vector3(0, 0 ,0);
 
-    this.mesh = SquareDice(size, col);  //in the future, switch case for dice type
+    this.mesh = SquareDice(this.size, this.col);  //in the future, switch case for dice type
     this.position = this.mesh.position;
     this.rotation = this.mesh.rotation;
+
+    this.rotation.z = 0.1;
 
     this.stopSequence = false;
 
@@ -182,30 +183,49 @@ function Dice(diceType, size, col, mass) {
         //initial position
         this.position.set(0, 50, 0);
     };
+
+    this.getLowerPoint = function() {
+        //min coordinates of the cube, if rotation only around z axis
+        var bottomY=0;
+        return bottomY;
+    };
     
     this.throw = function() {
         //reset speed
         this.velocity = new THREE.Vector3(0, 0, 0);
         //apply random force in one direction (x)
-        this.throwingForce.set(5, 0, 0);
+        this.throwingForce.set(0, 0, 0);
         this.toThrow = true;
         //apply rotation perpendicularly (z)
-        this.rotationVector.set(0, 0 , -0.1);
+        this.rotationVector.set(0, 0 , 0);
     };
 
     this.floorCollision = function() {
-        //min coordinates of the cube, if rotation only around z axis
-        var alpha = this.rotation.z % (Math.PI / 8);
-        var angle = (Math.PI / 8) - alpha;
-        var bottomY= this.position.y - Math.abs(Math.cos(angle) * this.size / Math.SQRT2);
-        if (bottomY <= 0) {
+        var alpha = Math.abs(this.rotation.z);
+        var angle = (Math.PI / 4) - alpha;
+        var deltaY = Math.cos(angle) * this.size / Math.SQRT2;
+        var bottomY = this.position.y - Math.abs(deltaY);
+
+        if (bottomY < 0) {
             console.log("collision");
+            console.log("position");
+            console.log(this.position);
+            console.log("bottomY");
+            console.log(bottomY);
+            console.log("alpha");
+            console.log(alpha);
+            console.log("angle");
             console.log(angle);
-            //re-position a bit above zero
+            console.log("delta");
+            console.log(deltaY);
+
+            //reposition at zero
             this.position.y += - bottomY;
-            //bouncing effect : reverse y in velocity, scaled down
-            //if angle close to 0, should not bounce much
-            this.velocity.y = - this.velocity.y * angle;
+            console.log("new pos");
+            console.log(this.position);
+            
+            //bouncing effect : reverse y in velocity
+            this.velocity.y = - this.velocity.y;
             //reduce speed
             this.velocity.multiplyScalar(0.8);
             //rotation
