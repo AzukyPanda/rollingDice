@@ -1,5 +1,3 @@
-"use strict";
-
 function Environment(width, height, viewAngle, near, far, backgroundColor) {
     var aspect;
     var self = this;
@@ -22,8 +20,8 @@ function Environment(width, height, viewAngle, near, far, backgroundColor) {
     
     this.init = function() {
         //set camera
-        this.camera.position.set(20, 50, 150);
-        this.camera.lookAt(new THREE.Vector3(500, 0, 0));
+        this.camera.position.set(50, 60, 250);
+        this.camera.lookAt(new THREE.Vector3(0, 0, 0));
         //set trackball controls
         this.initControls();
         //set renderer
@@ -36,20 +34,31 @@ function Environment(width, height, viewAngle, near, far, backgroundColor) {
         controls.rotateSpeed = 1.0;
         controls.zoomSpeed = 0.2;
         controls.panSpeed = 0.8;
-        controls.noZoom = false;
-        controls.noPan = false;
         controls.staticMoving = true;
         controls.dynamicDampingFactor = 0.3;
     };
 
-    this.addLight = function() {
-        var pointLight = new THREE.PointLight(0xffffff);
-        pointLight.position.set(0, 300, 200);
-        this.scene.add(pointLight);
+    this.addLights = function() {
+        var light = new THREE.AmbientLight(0xebeedc);
+        //this.scene.add(light);
+
+        var spotLight = new THREE.SpotLight(0xffffff, 1, 10000);
+        spotLight.position.set(0,100,10);
+        //this.scene.add(spotLight);
+
+        var lightB = new THREE.HemisphereLight( 0xffffff, 0xc5c5c5, 1 );
+        this.scene.add( lightB );
     };
     
     this.addAxes = function() {
-        this.scene.add(buildAxes(1000));
+        this.axes = buildAxes(1000);
+        this.scene.add(this.axes);
+    };
+
+    this.cameraLookDir = function() {
+        var vec = new THREE.Vector3(0, 0, -1);
+        vec.applyQuaternion(this.camera.quaternion);
+        return vec;
     };
 };
 
@@ -57,7 +66,7 @@ function start() {
     var env = new Environment();
     env.init();
     env.addAxes();
-    env.addLight();
+    env.addLights();
     
     //add canvas to HTML
     document.body.appendChild(env.renderer.domElement);
@@ -75,11 +84,9 @@ function start() {
     dice.throw();
     env.scene.add(dice.mesh);
 
-    var cube = SquareDice(1);
-    env.scene.add(cube);
-
     var id;
     var nbFrames = 0;
+    var stop = false;
     
     //rendering one frame
     env.animate = function() {
@@ -89,12 +96,11 @@ function start() {
         env.controls.update();
 
         //criteria to stop animation
-        if (nbFrames < 500) {
-            nbFrames += 1;
-            dice.applyForces();
+        if (nbFrames < 6000 && !stop) {
             dice.move(dt);
-            //console.log(dice.velocity);
         }
+        nbFrames += 1;
+        
         env.renderer.render(env.scene, env.camera);
     };
 
@@ -137,10 +143,10 @@ function buildAxis(src, dst, colorHex, dashed) {
 function buildFloor(width, length, col, y) {
     width = 500;
     length = 500;
-    col = 0xffffff;
+    col = 0xd8d8d8;
     y = 0;
     var geo = new THREE.PlaneGeometry(width, length);
-    var mat = new THREE.MeshBasicMaterial({color: col});
+    var mat = new THREE.MeshLambertMaterial({color: col});
     var plane = new THREE.Mesh(geo, mat); //placed in plane xy, z=0 
     plane.rotation.x = -Math.PI/2;
     plane.position.set(0, y, 0);
@@ -148,19 +154,17 @@ function buildFloor(width, length, col, y) {
 }
 
 function SquareDice(size, col) {
-    col = 0xcccccc;
-    var mat = new THREE.MeshBasicMaterial({color: col, wireframe: true});
-    var cube = new THREE.Mesh(new THREE.CubeGeometry(size, size, size), mat);
+    var mat = new THREE.MeshLambertMaterial({color: col});
+    var cube = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), mat);
+    cube.castShadow = true;
     return cube;
 }
 
 function Dice(diceType, size, col, mass) {
     this.diceType = "square";
     this.mass = 10;
-    this.col = 0xcccccc;
-    this.size = 20;
-
-    this.halfSize = this.size / 2;
+    this.col = 0xb2b2b2;
+    this.size = 10;
     
     this.velocity = new THREE.Vector3(0, 0, 0);
     this.force =  new THREE.Vector3(0, 0, 0);
@@ -170,9 +174,10 @@ function Dice(diceType, size, col, mass) {
     this.position = this.mesh.position;
     this.rotation = this.mesh.rotation;
 
-    this.rotation.z = 0.1;
+    
 
-    this.stopSequence = false;
+    this.rollOnly = false;
+    this.boundingBox = new THREE.Box3();
 
     //forces
     this.throwingForce = new THREE.Vector3(0, 0, 0);
@@ -181,56 +186,46 @@ function Dice(diceType, size, col, mass) {
 
     this.init = function() {
         //initial position
-        this.position.set(0, 50, 0);
-    };
-
-    this.getLowerPoint = function() {
-        //min coordinates of the cube, if rotation only around z axis
-        var bottomY=0;
-        return bottomY;
+        //this.mesh.rotateY(Math.PI / 4);
+        this.position.set(-50, 100, -10);
     };
     
     this.throw = function() {
         //reset speed
         this.velocity = new THREE.Vector3(0, 0, 0);
         //apply random force in one direction (x)
-        this.throwingForce.set(0, 0, 0);
+        this.throwingForce.set(3, 0, 3);
         this.toThrow = true;
         //apply rotation perpendicularly (z)
-        this.rotationVector.set(0, 0 , 0);
+        this.rotationVector.set(0.05, 0 , -0.05);
     };
 
     this.floorCollision = function() {
-        var alpha = Math.abs(this.rotation.z);
-        var angle = (Math.PI / 4) - alpha;
-        var deltaY = Math.cos(angle) * this.size / Math.SQRT2;
-        var bottomY = this.position.y - Math.abs(deltaY);
+        this.boundingBox.setFromObject(this.mesh);
 
-        if (bottomY < 0) {
-            console.log("collision");
-            console.log("position");
-            console.log(this.position);
-            console.log("bottomY");
-            console.log(bottomY);
-            console.log("alpha");
-            console.log(alpha);
-            console.log("angle");
-            console.log(angle);
-            console.log("delta");
-            console.log(deltaY);
-
+        if (this.boundingBox.min.y < 0) {
             //reposition at zero
-            this.position.y += - bottomY;
+            this.position.y += - this.boundingBox.min.y + 0.001;
             console.log("new pos");
             console.log(this.position);
-            
-            //bouncing effect : reverse y in velocity
-            this.velocity.y = - this.velocity.y;
-            //reduce speed
-            this.velocity.multiplyScalar(0.8);
-            //rotation
-            this.rotationVector.multiplyScalar(0.9);
+
+            //Bouncing: negative y speed above a threshold
+            if (this.velocity.y < -0.5) {
+                this.collisionForce.addScaledVector(this.gravity, -1);
+                //reverse y in velocity
+                this.velocity.y = - this.velocity.y;
+                //reduce speed
+                this.velocity.multiplyScalar(0.7);
+                //reduce rotation
+                this.rotationVector.multiplyScalar(0.8);
             }
+            //stop sequence: rolls then stops, no y speed anymore
+            else {
+                this.rollOnly = true;
+                this.velocity.set(0, 0, 0);
+                this.rotationVector.set(0, 0, 0);
+            }
+        }
     };
 
     this.applyForces = function() {
@@ -250,16 +245,27 @@ function Dice(diceType, size, col, mass) {
         if (dt < 0.1){
             dt = 0.1;
         }
-        //new velocity
-        this.velocity.addScaledVector(this.force, dt / this.mass);
-        
-        //new position
-        this.mesh.position.addScaledVector(this.velocity, dt);
 
-        //rotation
-        this.mesh.rotation.x += this.rotationVector.x;
-        this.mesh.rotation.y += this.rotationVector.y;
-        this.mesh.rotation.z += this.rotationVector.z;
+        //Bouncing sequence
+        if (!this.rollOnly) {
+            this.applyForces();
+        
+            //new velocity
+            this.velocity.addScaledVector(this.force, dt / this.mass);
+        
+            //new position
+            this.mesh.position.addScaledVector(this.velocity, dt);
+
+            //rotation
+            this.mesh.rotateX(this.rotationVector.x); 
+            this.mesh.rotateY(this.rotationVector.y);
+            this.mesh.rotateZ(this.rotationVector.z);
+        }
+        //Rolling sequence
+        else {
+            
+        }
+        
     };
 }
 
