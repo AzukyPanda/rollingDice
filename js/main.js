@@ -96,7 +96,7 @@ function start() {
         env.controls.update();
 
         //criteria to stop animation
-        if (nbFrames < 6000 && !stop) {
+        if (nbFrames < 1050 && !stop) {
             dice.move(dt);
         }
         nbFrames += 1;
@@ -150,6 +150,7 @@ function buildFloor(width, length, col, y) {
     var plane = new THREE.Mesh(geo, mat); //placed in plane xy, z=0 
     plane.rotation.x = -Math.PI/2;
     plane.position.set(0, y, 0);
+    plane.receiveShadow = true;
     return plane; 
 }
 
@@ -178,15 +179,15 @@ function Dice(diceType, size, col, mass) {
 
     this.rollOnly = false;
     this.boundingBox = new THREE.Box3();
+    this.counter = 0;
 
     //forces
     this.throwingForce = new THREE.Vector3(0, 0, 0);
-    this.collisionForce = new THREE.Vector3(0, 0, 0);
     this.gravity = new THREE.Vector3(0, - this.mass * 0.0098, 0); //9.8 m/s^2
 
     this.init = function() {
         //initial position
-        //this.mesh.rotateY(Math.PI / 4);
+        this.mesh.rotateY(0.785 * Math.PI / 4);
         this.position.set(-50, 100, -10);
     };
     
@@ -194,10 +195,10 @@ function Dice(diceType, size, col, mass) {
         //reset speed
         this.velocity = new THREE.Vector3(0, 0, 0);
         //apply random force in one direction (x)
-        this.throwingForce.set(3, 0, 3);
+        this.throwingForce.set(4, 0, 2);
         this.toThrow = true;
         //apply rotation perpendicularly (z)
-        this.rotationVector.set(0.05, 0 , -0.05);
+        this.rotationVector.set(0.02, 0 , -0.04);
     };
 
     this.floorCollision = function() {
@@ -206,12 +207,29 @@ function Dice(diceType, size, col, mass) {
         if (this.boundingBox.min.y < 0) {
             //reposition at zero
             this.position.y += - this.boundingBox.min.y + 0.001;
-            console.log("new pos");
-            console.log(this.position);
 
+            if (this.rollOnly) {
+
+                if (this.counter % 50 === 0){
+                    console.log("roll only");
+                    console.log(this.position);
+                    console.log(this.velocity);
+                    console.log("min");
+                    console.log(this.boundingBox.min);
+                }
+                
+                this.counter += 1;
+                //reduce speed
+                this.velocity.multiplyScalar(0.999);
+                
+                //reduce rotation
+                this.rotationVector.multiplyScalar(0.999);
+                return;
+            }
+            
             //Bouncing: negative y speed above a threshold
             if (this.velocity.y < -0.5) {
-                this.collisionForce.addScaledVector(this.gravity, -1);
+                //this.collisionForce.addScaledVector(this.gravity, -1);
                 //reverse y in velocity
                 this.velocity.y = - this.velocity.y;
                 //reduce speed
@@ -222,6 +240,8 @@ function Dice(diceType, size, col, mass) {
             //stop sequence: rolls then stops, no y speed anymore
             else {
                 this.rollOnly = true;
+                this.gravity.set(0, 0, 0);
+                return;
                 this.velocity.set(0, 0, 0);
                 this.rotationVector.set(0, 0, 0);
             }
@@ -230,15 +250,11 @@ function Dice(diceType, size, col, mass) {
 
     this.applyForces = function() {
         this.force.set(0, 0, 0);
-        //compute forces
-        this.floorCollision();
         //add all forces
         this.force.add(this.throwingForce);
-        this.force.add(this.collisionForce);
         this.force.add(this.gravity);
         //reset external forces
         this.throwingForce.set(0, 0, 0);
-        this.collisionForce.set(0, 0, 0);
     };
 
     this.move = function(dt) {
@@ -247,7 +263,7 @@ function Dice(diceType, size, col, mass) {
         }
 
         //Bouncing sequence
-        if (!this.rollOnly) {
+        if (true) {
             this.applyForces();
         
             //new velocity
@@ -255,17 +271,14 @@ function Dice(diceType, size, col, mass) {
         
             //new position
             this.mesh.position.addScaledVector(this.velocity, dt);
+            //test for collision at new position
+            this.floorCollision();
 
             //rotation
             this.mesh.rotateX(this.rotationVector.x); 
             this.mesh.rotateY(this.rotationVector.y);
             this.mesh.rotateZ(this.rotationVector.z);
         }
-        //Rolling sequence
-        else {
-            
-        }
-        
     };
 }
 
