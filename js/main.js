@@ -2,15 +2,20 @@ function Environment(width, height, viewAngle, near, far, backgroundColor) {
     var aspect;
     var self = this;
     
-    //scene size and aspect
+    //scene size and aspect (2D)
     this.width = width | window.innerWidth;
     this.height = height | window.innerHeight;
     backgroundColor = backgroundColor | 0xeeeeee;
-    
+
+    //3D environment size
+    this.Xmax = 100;
+    this.Ymax = 100;
+    this.Zmax = 100;
+
     //camera attributes
     viewAngle = viewAngle | 45;
     near = near | 1;
-    far = far | 10000;
+    far = far | 1000;
     aspect = this.width / this.height;
 
     this.scene = new THREE.Scene();
@@ -19,14 +24,18 @@ function Environment(width, height, viewAngle, near, far, backgroundColor) {
     this.renderer = new THREE.WebGLRenderer({antialias: true, alpha: true});
     
     this.init = function() {
+        //scene offset
+        this.scene.position.set(this.Xmax * -1, 0, this.Zmax * -0.6);
         //set camera
-        this.camera.position.set(50, 60, 250);
+        this.camera.position.set(this.Xmax*0.8, this.Ymax*1, this.Zmax*3);
+        console.log(this.camera.position);
         this.camera.lookAt(new THREE.Vector3(0, 0, 0));
         //set trackball controls
         this.initControls();
         //set renderer
         this.renderer.setSize(this.width, this.height);
         this.renderer.setClearColor(backgroundColor, 1.0);
+        this.renderer.shadowMap.enabled = true;
     };
     
     this.initControls = function() {
@@ -39,15 +48,10 @@ function Environment(width, height, viewAngle, near, far, backgroundColor) {
     };
 
     this.addLights = function() {
-        var light = new THREE.AmbientLight(0xebeedc);
-        //this.scene.add(light);
+        this.scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 
-        var spotLight = new THREE.SpotLight(0xffffff, 1, 10000);
-        spotLight.position.set(0,100,10);
-        //this.scene.add(spotLight);
-
-        var lightB = new THREE.HemisphereLight( 0xffffff, 0xc5c5c5, 1 );
-        this.scene.add( lightB );
+        var hemi = new THREE.HemisphereLight(0xffffff, 0x080820, 0.5);
+        this.scene.add(hemi);
     };
     
     this.addAxes = function() {
@@ -70,23 +74,19 @@ function start() {
     
     //add canvas to HTML
     document.body.appendChild(env.renderer.domElement);
-
-    //time
-    var dt = 1;
-
+    
     //floor
-    var floor = buildFloor();
+    var floor = buildFloor(env.Xmax*2, env.Zmax*2, 0xd8d8d8, 0);
     env.scene.add(floor);
 
     //dice
     var dice = new Dice();
-    dice.init();
+    dice.init(0, env.Ymax, 0);
     dice.throw();
     env.scene.add(dice.mesh);
 
     var id;
     var nbFrames = 0;
-    var stop = false;
     
     //rendering one frame
     env.animate = function() {
@@ -96,8 +96,8 @@ function start() {
         env.controls.update();
 
         //criteria to stop animation
-        if (nbFrames < 1050 && !stop) {
-            dice.move(dt);
+        if (nbFrames < 800 && !dice.stopped) {
+            dice.move();
         }
         nbFrames += 1;
         
@@ -141,20 +141,16 @@ function buildAxis(src, dst, colorHex, dashed) {
 }
 
 function buildFloor(width, length, col, y) {
-    width = 500;
-    length = 500;
-    col = 0xd8d8d8;
-    y = 0;
     var geo = new THREE.PlaneGeometry(width, length);
     var mat = new THREE.MeshLambertMaterial({color: col});
     var plane = new THREE.Mesh(geo, mat); //placed in plane xy, z=0 
     plane.rotation.x = -Math.PI/2;
-    plane.position.set(0, y, 0);
+    plane.position.set( width/2, y, length/2);
     plane.receiveShadow = true;
     return plane; 
 }
 
-function SquareDice(size, col) {
+function buildSquareDice(size, col) {
     var mat = new THREE.MeshLambertMaterial({color: col});
     var cube = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), mat);
     cube.castShadow = true;
@@ -166,39 +162,40 @@ function Dice(diceType, size, col, mass) {
     this.mass = 10;
     this.col = 0xb2b2b2;
     this.size = 10;
+    this.dt = 1;
     
+    this.halfSize = this.size / 2;
     this.velocity = new THREE.Vector3(0, 0, 0);
     this.force =  new THREE.Vector3(0, 0, 0);
     this.rotationVector = new THREE.Vector3(0, 0 ,0);
-
-    this.mesh = SquareDice(this.size, this.col);  //in the future, switch case for dice type
+    this.throwingForce = new THREE.Vector3(0, 0, 0);
+    this.gravity = new THREE.Vector3(0, - this.mass * 0.0098, 0); //9.8 m/s^2
+    
+    this.mesh = buildSquareDice(this.size, this.col);  //in the future, switch case for dice type
     this.position = this.mesh.position;
     this.rotation = this.mesh.rotation;
 
-    
-
     this.rollOnly = false;
     this.boundingBox = new THREE.Box3();
-    this.counter = 0;
+    this.stopped = false;
 
-    //forces
-    this.throwingForce = new THREE.Vector3(0, 0, 0);
-    this.gravity = new THREE.Vector3(0, - this.mass * 0.0098, 0); //9.8 m/s^2
-
-    this.init = function() {
-        //initial position
+    this.init = function(x, y , z) {
+        //TODO: add randomness
+        //initial rotation
         this.mesh.rotateY(0.785 * Math.PI / 4);
-        this.position.set(-50, 100, -10);
+        //itinial position
+        var h = this.halfSize;
+        this.position.set(x + h, y - h, z + h);
     };
     
     this.throw = function() {
         //reset speed
         this.velocity = new THREE.Vector3(0, 0, 0);
         //apply random force in one direction (x)
-        this.throwingForce.set(4, 0, 2);
-        this.toThrow = true;
-        //apply rotation perpendicularly (z)
-        this.rotationVector.set(0.02, 0 , -0.04);
+        this.throwingForce.set(4, 0, 4);
+        //rotation in the direction of the force
+        this.mesh.lookAt(this.throwingForce);
+        this.rotationVector.set(-0.06, 0, 0);
     };
 
     this.floorCollision = function() {
@@ -207,28 +204,23 @@ function Dice(diceType, size, col, mass) {
         if (this.boundingBox.min.y < 0) {
             //reposition at zero
             this.position.y += - this.boundingBox.min.y + 0.001;
-
-            if (this.rollOnly) {
-
-                if (this.counter % 50 === 0){
-                    console.log("roll only");
-                    console.log(this.position);
-                    console.log(this.velocity);
-                    console.log("min");
-                    console.log(this.boundingBox.min);
-                }
-                
-                this.counter += 1;
-                //reduce speed
-                this.velocity.multiplyScalar(0.999);
-                
-                //reduce rotation
-                this.rotationVector.multiplyScalar(0.999);
-                return;
-            }
             
-            //Bouncing: negative y speed above a threshold
-            if (this.velocity.y < -0.5) {
+            //dice is rolling on the floor
+            if (this.rollOnly) {
+                //reduce speed
+                this.velocity.multiplyScalar(0.995);
+                //reduce rotation
+                this.rotationVector.multiplyScalar(0.995);
+
+                //dice stops
+                if (this.rotationVector.x > - 0.025 && this.rotation.x % Math.PI/4 < 0.1) {
+                    this.rotationVector.set(0, 0, 0);
+                    this.velocity.set(0, 0, 0);
+                    this.stopped = true;
+                }
+            }
+            //or dice is bouncing: negative y speed above a threshold
+            else if (this.velocity.y < -0.7) {
                 //this.collisionForce.addScaledVector(this.gravity, -1);
                 //reverse y in velocity
                 this.velocity.y = - this.velocity.y;
@@ -237,13 +229,11 @@ function Dice(diceType, size, col, mass) {
                 //reduce rotation
                 this.rotationVector.multiplyScalar(0.8);
             }
-            //stop sequence: rolls then stops, no y speed anymore
+            //or dice starts rolling on floor
             else {
                 this.rollOnly = true;
                 this.gravity.set(0, 0, 0);
                 return;
-                this.velocity.set(0, 0, 0);
-                this.rotationVector.set(0, 0, 0);
             }
         }
     };
@@ -258,27 +248,21 @@ function Dice(diceType, size, col, mass) {
     };
 
     this.move = function(dt) {
-        if (dt < 0.1){
-            dt = 0.1;
-        }
-
-        //Bouncing sequence
-        if (true) {
-            this.applyForces();
+        this.applyForces();
         
-            //new velocity
-            this.velocity.addScaledVector(this.force, dt / this.mass);
+        //new velocity
+        this.velocity.addScaledVector(this.force, this.dt / this.mass);
         
-            //new position
-            this.mesh.position.addScaledVector(this.velocity, dt);
-            //test for collision at new position
-            this.floorCollision();
+        //new position
+        this.mesh.position.addScaledVector(this.velocity, this.dt);
+        
+        //test for collision at new position
+        this.floorCollision();
 
-            //rotation
-            this.mesh.rotateX(this.rotationVector.x); 
-            this.mesh.rotateY(this.rotationVector.y);
-            this.mesh.rotateZ(this.rotationVector.z);
-        }
+        //rotation
+        this.mesh.rotateX(this.rotationVector.x); 
+        this.mesh.rotateY(this.rotationVector.y);
+        this.mesh.rotateZ(this.rotationVector.z);
     };
 }
 
