@@ -8,9 +8,9 @@ function Environment(width, height, viewAngle, near, far, backgroundColor) {
     backgroundColor = backgroundColor | 0xeeeeee;
 
     //3D environment size
-    this.Xmax = 100;
-    this.Ymax = 100;
-    this.Zmax = 100;
+    this.xMax = 200;
+    this.yMax = 100;
+    this.zMax = 200;
 
     //camera attributes
     viewAngle = viewAngle | 45;
@@ -25,10 +25,9 @@ function Environment(width, height, viewAngle, near, far, backgroundColor) {
     
     this.init = function() {
         //scene offset
-        this.scene.position.set(this.Xmax * -1, 0, this.Zmax * -0.6);
+        //this.scene.position.set(this.Xmax * -0.6, 0, this.Zmax * -0.6);
         //set camera
-        this.camera.position.set(this.Xmax*0.8, this.Ymax*1, this.Zmax*3);
-        console.log(this.camera.position);
+        this.camera.position.set(this.xMax*0.2, this.yMax*1.5, this.zMax*1.2);
         this.camera.lookAt(new THREE.Vector3(0, 0, 0));
         //set trackball controls
         this.initControls();
@@ -75,14 +74,27 @@ function start() {
     //add canvas to HTML
     document.body.appendChild(env.renderer.domElement);
     
-    //floor
-    var floor = buildFloor(env.Xmax*2, env.Zmax*2, 0xd8d8d8, 0);
+    var objects = {};
+    
+    //obstacles
+    var floor = buildFloor(env.xMax, env.zMax, 0xd8d8d8, 0);
     env.scene.add(floor);
 
+    var borders = {
+        yMin: 0,
+        yMax: env.yMax,
+        xMin: 0  - env.scene.position.x,
+        xMax: env.xMax  - env.scene.position.x,
+        zMin: 0  - env.scene.position.z,
+        zMax: env.zMax - env.scene.position.z
+    };
+
+    console.log(borders);
+    
     //dice
-    var dice = new Dice();
-    dice.init(0, env.Ymax, 0);
-    dice.throw();
+    var dice = new Dice(borders);
+    dice.init(0, env.yMax, 0);
+    dice.throw(0, 0, 20);
     env.scene.add(dice.mesh);
 
     var id;
@@ -96,9 +108,10 @@ function start() {
         env.controls.update();
 
         //criteria to stop animation
-        if (nbFrames < 800 && !dice.stopped) {
-            dice.move();
+        if (nbFrames < 1000 && !dice.stopped) {
+            dice.move(objects);
         }
+        
         nbFrames += 1;
         
         env.renderer.render(env.scene, env.camera);
@@ -147,6 +160,7 @@ function buildFloor(width, length, col, y) {
     plane.rotation.x = -Math.PI/2;
     plane.position.set( width/2, y, length/2);
     plane.receiveShadow = true;
+    plane.material.side = THREE.DoubleSide;
     return plane; 
 }
 
@@ -157,14 +171,16 @@ function buildSquareDice(size, col) {
     return cube;
 }
 
-function Dice(diceType, size, col, mass) {
+function Dice(borders, diceType, size, col, mass) {
     this.diceType = "square";
     this.mass = 10;
     this.col = 0xb2b2b2;
     this.size = 10;
     this.dt = 1;
-    
-    this.halfSize = this.size / 2;
+    this.borders = borders;
+
+    var rotationSpeed = 0.06;
+    var halfSize = this.size / 2;
     this.velocity = new THREE.Vector3(0, 0, 0);
     this.force =  new THREE.Vector3(0, 0, 0);
     this.rotationVector = new THREE.Vector3(0, 0 ,0);
@@ -182,28 +198,28 @@ function Dice(diceType, size, col, mass) {
     this.init = function(x, y , z) {
         //TODO: add randomness
         //initial rotation
-        this.mesh.rotateY(0.785 * Math.PI / 4);
+        //this.mesh.rotateY(0.785 * Math.PI / 4);
         //itinial position
-        var h = this.halfSize;
+        var h = this.size;
         this.position.set(x + h, y - h, z + h);
+        //compute bounding box
+        this.boundingBox.setFromObject(this.mesh);
     };
     
-    this.throw = function() {
+    this.throw = function(x, y , z) {
         //reset speed
         this.velocity = new THREE.Vector3(0, 0, 0);
         //apply random force in one direction (x)
-        this.throwingForce.set(4, 0, 4);
+        this.throwingForce.set(x, y, z);
+        this.mesh.lookAt(this.position.clone().add(this.throwingForce));
         //rotation in the direction of the force
-        this.mesh.lookAt(this.throwingForce);
-        this.rotationVector.set(-0.06, 0, 0);
+        this.rotationVector.set(rotationSpeed, 0, 0);
     };
 
     this.floorCollision = function() {
-        this.boundingBox.setFromObject(this.mesh);
-
-        if (this.boundingBox.min.y < 0) {
+        if (this.boundingBox.min.y < this.borders.yMin) {
             //reposition at zero
-            this.position.y += - this.boundingBox.min.y + 0.001;
+            this.position.y += this.borders.yMin - this.boundingBox.min.y;
             
             //dice is rolling on the floor
             if (this.rollOnly) {
@@ -213,8 +229,17 @@ function Dice(diceType, size, col, mass) {
                 this.rotationVector.multiplyScalar(0.995);
 
                 //dice stops
-                if (this.rotationVector.x > - 0.025 && this.rotation.x % Math.PI/4 < 0.1) {
+                if (Math.abs(this.rotationVector.x) < 0.025 && this.rotation.x % Math.PI/4 < 0.01
+                    && this.rotation.z % Math.PI/4 <0.01) {
+                    console.log("stop");
+                    console.log(this.rotation);
+                    console.log(this.rotationVector);
+                    
                     this.rotationVector.set(0, 0, 0);
+                    this.rotation.set(0, this.rotation.y, 0);
+                    this.position.addScaledVector(this.velocity, this.dt);
+                    this.position.y = this.borders.yMin + halfSize;
+                    
                     this.velocity.set(0, 0, 0);
                     this.stopped = true;
                 }
@@ -238,6 +263,50 @@ function Dice(diceType, size, col, mass) {
         }
     };
 
+    this.borderCollision = function() {
+        var collide = false;
+
+        //collision in x
+        if (this.boundingBox.min.x < this.borders.xMin)
+        {
+            this.position.x += this.borders.xMin - this.boundingBox.min.x;
+            this.velocity.x = - this.velocity.x;
+            collide = true;
+        }
+        else if (this.boundingBox.max.x > this.borders.xMax) {
+            console.log("collide x");
+            console.log(this.boundingBox.min.x);
+            console.log(this.borders.xMin);
+            console.log(this.position);
+
+            this.position.x += this.borders.xMax - this.boundingBox.max.x;
+            this.velocity.x = - this.velocity.x;
+            collide = true;
+        }
+        //collision in z
+        if (this.boundingBox.min.z < this.borders.zMin){
+            this.position.z += this.borders.zMin - this.boundingBox.min.z;
+            this.velocity.z = - this.velocity.z;
+            collide = true;
+        }
+        else if (this.boundingBox.max.z > this.borders.zMax) {
+            console.log("collide z");
+            console.log(this.boundingBox.min);
+
+            this.position.z += this.borders.zMax - this.boundingBox.max.z;
+            this.velocity.z = - this.velocity.z;
+            collide = true;
+        }
+        if (collide) {
+            //reduce speed
+            this.velocity.multiplyScalar(0.7);
+            //reduce rotation
+            this.rotationVector.multiplyScalar(0.8);
+            //reverse rotation
+            this.rotationVector.multiplyScalar(-1);
+        }
+    };
+
     this.applyForces = function() {
         this.force.set(0, 0, 0);
         //add all forces
@@ -247,7 +316,7 @@ function Dice(diceType, size, col, mass) {
         this.throwingForce.set(0, 0, 0);
     };
 
-    this.move = function(dt) {
+    this.move = function(objects) {
         this.applyForces();
         
         //new velocity
@@ -255,14 +324,24 @@ function Dice(diceType, size, col, mass) {
         
         //new position
         this.mesh.position.addScaledVector(this.velocity, this.dt);
+
+        //recompute bounding box
+        this.boundingBox.setFromObject(this.mesh);
         
         //test for collision at new position
-        this.floorCollision();
+        this.floorCollision(); 
+        this.borderCollision();
+        for (var key in objects) {
+            var obj = objects[key];
+         }
 
         //rotation
         this.mesh.rotateX(this.rotationVector.x); 
         this.mesh.rotateY(this.rotationVector.y);
         this.mesh.rotateZ(this.rotationVector.z);
+
+        //recompute bounding box (after collision and rotation)
+        this.boundingBox.setFromObject(this.mesh);
     };
 }
 
