@@ -63,7 +63,7 @@ function start() {
     document.body.appendChild(env.renderer.domElement);
 
     //time
-    var dt = 1;
+    var dt = 5;
 
     //floor
     var floor = buildFloor();
